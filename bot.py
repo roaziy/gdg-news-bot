@@ -5,7 +5,7 @@ import asyncio
 import os
 from datetime import datetime, timedelta
 import json
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 from dotenv import load_dotenv
 import logging
 import aiohttp
@@ -40,15 +40,15 @@ class TranslationService:
     """Handles text translation to Mongolian"""
     
     def __init__(self):
-        self.translator = Translator()
         self.max_chunk_size = 500
     
     async def translate_to_mongolian(self, text: str) -> str:
         """Translate text to Mongolian with chunking for long texts"""
         try:
             if len(text) <= self.max_chunk_size:
-                result = self.translator.translate(text, dest='mn')
-                return result.text
+                translator = GoogleTranslator(source='en', target='mn')
+                result = translator.translate(text)
+                return result
             
             # Split text into sentences and translate in chunks
             sentences = text.split('. ')
@@ -60,16 +60,19 @@ class TranslationService:
                     current_chunk += sentence + ". "
                 else:
                     if current_chunk:
-                        result = self.translator.translate(current_chunk.strip(), dest='mn')
-                        translated_chunks.append(result.text)
+                        translator = GoogleTranslator(source='en', target='mn')
+                        result = translator.translate(current_chunk.strip())
+                        translated_chunks.append(result)
                         current_chunk = sentence + ". "
                     else:
-                        result = self.translator.translate(sentence, dest='mn')
-                        translated_chunks.append(result.text)
+                        translator = GoogleTranslator(source='en', target='mn')
+                        result = translator.translate(sentence)
+                        translated_chunks.append(result)
             
             if current_chunk:
-                result = self.translator.translate(current_chunk.strip(), dest='mn')
-                translated_chunks.append(result.text)
+                translator = GoogleTranslator(source='en', target='mn')
+                result = translator.translate(current_chunk.strip())
+                translated_chunks.append(result)
             
             return " ".join(translated_chunks)
             
