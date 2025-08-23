@@ -1,14 +1,36 @@
 # GDG Ulaanbaatar Tech News Bot 🤖
 
-A Discord bot that automatically fetches the latest tech news from **The Verge** and translates them to **Mongolian** for the GDG Ulaanbaatar community.
+A professional Discord bot that automatically fetches the latest tech news from **The Verge** and translates them to **Mongolian** for the GDG Ulaanbaatar community.
 
 ## Features 🚀
 
-- **Automated News Fetching**: Checks The Verge RSS feed every 4 hours for latest tech news
-- **Mongolian Translation**: Translates news titles and descriptions from English to Mongolian
-- **Smart Filtering**: Only posts news from the last 24 hours to avoid spam
-- **Rich Embeds**: Beautiful Discord embeds with original titles for reference
-- **Admin Commands**: Test and status commands for server administrators
+- **📰 Automated News Fetching**: Checks The Verge RSS feed every 4 hours for latest tech news
+- **🌍 Mongolian Translation**: Translates news titles and descriptions from English to Mongolian
+- **🎯 Smart Tech Filtering**: Advanced filtering to ensure only technology-related content
+- **🏢 Multi-Server Support**: Deploy across multiple Discord servers simultaneously
+- **🎨 Professional Design**: Clean, branded embeds with GDG Ulaanbaatar theming (no emojis)
+- **🔐 Robust Permission Handling**: Works gracefully even with limited Discord permissions
+- **💬 Interactive Mentions**: Users can mention the bot to get latest news
+- **🛡️ Error Recovery**: Intelligent fallbacks and comprehensive error handling
+
+## Bot Commands 🎮
+
+### User Commands
+
+- **`!info`** - Show bot information and help
+- **`!status`** - Check bot status and statistics
+- **`!checkperms`** - Check bot permissions in current channel
+
+### Admin Commands
+
+- **`!news`** - Manually fetch and post latest news (requires Manage Messages permission)
+
+### Mention Support
+
+Users can interact with the bot naturally:
+
+- `@GDG UB BOT шинэ мэдээ байна уу?` - Get latest tech news
+- `@GDG UB BOT статус?` - Check bot status
 
 ## Setup Instructions 📋
 
@@ -64,13 +86,21 @@ pip install -r requirements.txt
    ```
 
 2. Edit `.env` file with your values:
+
    ```env
+   # Discord Bot Configuration
    DISCORD_TOKEN=your_discord_bot_token_here
-   DISCORD_CHANNEL_ID=your_channel_id_here
-   NEWS_CHECK_INTERVAL_HOURS=4
-   MAX_NEWS_PER_POST=3
-   TARGET_LANGUAGE=mn
+   DISCORD_CHANNEL_IDS=channel_id_1,channel_id_2,channel_id_3
+
+   # Bot Settings
+   CHECK_INTERVAL_HOURS=4
+   STRICT_TECH_FILTER=true
+
+   # Translation Settings
+   TRANSLATE_TO_MONGOLIAN=true
    ```
+
+   **Multi-Channel Setup**: Use comma-separated channel IDs to post to multiple channels/servers
 
 ### 6. Run the Bot
 
@@ -80,26 +110,57 @@ python bot.py
 
 ## Bot Commands 🎮
 
-- `!test_news` - Manually fetch and post latest news (Admin only)
-- `!news_status` - Check bot status and last update time
+### User Commands
+
+- **`!info`** - Show bot information and help
+- **`!status`** - Check bot status and statistics
+- **`!checkperms`** - Check bot permissions in current channel
+
+### Admin Commands
+
+- **`!news`** - Manually fetch and post latest news (requires Manage Messages permission)
+
+### Mention Support
+
+Users can interact with the bot naturally:
+
+- `@GDG UB BOT шинэ мэдээ байна уу?` - Get latest tech news
+- `@GDG UB BOT статус?` - Check bot status
 
 ## Configuration Options ⚙️
 
-| Environment Variable        | Description                          | Default        |
-| --------------------------- | ------------------------------------ | -------------- |
-| `DISCORD_TOKEN`             | Your Discord bot token               | Required       |
-| `DISCORD_CHANNEL_ID`        | Channel ID where news will be posted | Required       |
-| `NEWS_CHECK_INTERVAL_HOURS` | Hours between news checks            | 4              |
-| `MAX_NEWS_PER_POST`         | Maximum articles per update          | 3              |
-| `TARGET_LANGUAGE`           | Translation target language code     | mn (Mongolian) |
+| Environment Variable     | Description                       | Default  |
+| ------------------------ | --------------------------------- | -------- |
+| `DISCORD_TOKEN`          | Your Discord bot token            | Required |
+| `DISCORD_CHANNEL_IDS`    | Comma-separated channel IDs       | Required |
+| `CHECK_INTERVAL_HOURS`   | Hours between news checks         | 4        |
+| `STRICT_TECH_FILTER`     | Enable strict tech news filtering | true     |
+| `TRANSLATE_TO_MONGOLIAN` | Enable Mongolian translation      | true     |
+
+### Multi-Server Deployment
+
+- **Single Channel**: `DISCORD_CHANNEL_IDS=123456789`
+- **Multiple Channels**: `DISCORD_CHANNEL_IDS=123456789,987654321,555666777`
+- **Cross-Server**: Bot can post to channels across different Discord servers
 
 ## How It Works 🔄
 
-1. **RSS Monitoring**: Bot checks The Verge RSS feed periodically
-2. **Content Filtering**: Only processes articles from the last 24 hours
-3. **Translation**: Uses Google Translate to convert English to Mongolian
-4. **Discord Posting**: Creates rich embeds with translated content
-5. **Original Reference**: Includes original English titles for accuracy
+1. **📡 RSS Monitoring**: Bot checks The Verge RSS feed periodically
+2. **🎯 Smart Tech Filtering**: Advanced keyword analysis ensures only tech news is posted
+3. **🌍 Translation**: Uses Google Translate to convert English to Mongolian
+4. **🎨 Professional Posting**: Creates clean, branded embeds with GDG theming
+5. **🔍 Original Reference**: Includes original English titles for accuracy
+6. **🛡️ Error Handling**: Graceful fallbacks for permission issues and server restrictions
+
+## Architecture 🏗️
+
+The bot uses a **professional modular architecture**:
+
+- **`NewsService`**: Handles RSS feed parsing and tech content filtering
+- **`TranslationService`**: Manages English to Mongolian translation
+- **`GDGNewsBot`**: Main bot class with permission-aware messaging
+- **Multi-Channel Support**: Intelligent routing for multiple Discord servers
+- **Error Recovery**: Comprehensive exception handling and fallback mechanisms
 
 ## Deployment Options 🚀
 
@@ -141,26 +202,32 @@ python bot.py
 
 1. **Bot not responding**:
 
-   - Check if bot token is correct
-   - Ensure bot has necessary permissions
-   - Check if bot is online in Discord
+   - Check if bot token is correct in `.env` file
+   - Ensure bot has necessary permissions (use `!checkperms` command)
+   - Verify bot is online in Discord server members list
 
-2. **No news posted**:
+2. **Permission errors (403 Forbidden)**:
 
-   - Verify channel ID is correct
-   - Check RSS feed accessibility
-   - Review logs for error messages
+   - Run `!checkperms` to diagnose permission issues
+   - Ensure bot has "Send Messages" and "Embed Links" permissions
+   - Bot will fall back to plain text if embed permissions are missing
 
-3. **Translation errors**:
+3. **No news posted**:
 
-   - Google Translate has rate limits
-   - Consider adding retry logic
+   - Verify channel IDs are correct in `.env` file
+   - Check if tech filter is too strict (set `STRICT_TECH_FILTER=false`)
+   - Review logs for RSS feed accessibility issues
+
+4. **Translation errors**:
+
+   - Google Translate has rate limits (bot includes retry logic)
    - Check internet connectivity
+   - Set `TRANSLATE_TO_MONGOLIAN=false` to disable translation temporarily
 
-4. **Import errors**:
-   - Ensure all dependencies are installed
-   - Activate virtual environment
-   - Run `pip install -r requirements.txt`
+5. **Multi-channel issues**:
+   - Ensure bot is invited to all target servers
+   - Check that channel IDs are comma-separated without spaces
+   - Bot will skip channels it cannot access and continue with others
 
 ## Contributing 🤝
 
