@@ -195,7 +195,8 @@ class NewsService:
             
             for entry in feed.entries[:20]:  # Check more articles to find tech ones
                 try:
-                    pub_date = datetime(*entry.published_parsed[:6])
+                    # Create timezone-aware datetime from RSS feed
+                    pub_date = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
                     
                     if pub_date > cutoff_time:
                         description = self.clean_html(entry.description)
