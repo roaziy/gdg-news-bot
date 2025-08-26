@@ -1,4 +1,4 @@
-# Dockerfile for Google Cloud Run
+# Dockerfile for Render.com deployment
 FROM python:3.11-slim
 
 # Set working directory
@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Cloud Run requires listening on PORT environment variable
-EXPOSE 8080
+# Render.com requires listening on PORT environment variable
+EXPOSE 10000
 
-# Run the bot directly
-CMD ["python", "bot.py"]
+# Run the web server wrapper (includes keep-alive and Discord bot)
+CMD ["python", "web_server.py"]

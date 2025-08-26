@@ -81,26 +81,39 @@ class HealthServer:
 
 async def keep_alive_ping():
     """Ping self every 10 minutes to prevent Render free tier sleeping"""
-    # Wait a bit for server to start
-    await asyncio.sleep(60)
+    # Wait for server to fully start
+    await asyncio.sleep(120)  # 2 minutes initial delay
     
-    # Get the service URL from environment or use default
-    service_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://gdg-news-bot-v1.onrender.com')
+    # Get the service URL from environment or build from port
+    service_url = os.environ.get('RENDER_EXTERNAL_URL')
+    if not service_url:
+        # Fallback to localhost for testing or use your actual Render URL
+        port = int(os.environ.get('PORT', 10000))
+        service_url = f"http://localhost:{port}"
+    
+    logger.info(f"🔄 Keep-alive ping will target: {service_url}")
     
     while True:
         try:
-            await asyncio.sleep(600)  # 10 minutes
+            # Wait 10 minutes between pings (well under 15-minute sleep threshold)
+            await asyncio.sleep(600)
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(f'{service_url}/health', timeout=30) as response:
                     if response.status == 200:
-                        logger.info(f"🔄 Keep-alive ping successful: {response.status}")
+                        logger.info(f"✅ Keep-alive ping successful: {response.status}")
                     else:
                         logger.warning(f"⚠️ Keep-alive ping returned: {response.status}")
+                        
         except asyncio.TimeoutError:
-            logger.warning("⚠️ Keep-alive ping timeout")
+            logger.warning("⚠️ Keep-alive ping timeout - service may be sleeping")
+        except aiohttp.ClientConnectorError as e:
+            logger.warning(f"⚠️ Keep-alive ping connection error: {e}")
         except Exception as e:
             logger.error(f"❌ Keep-alive ping failed: {e}")
+            
+        # Small delay before next iteration to prevent rapid retries on error
+        await asyncio.sleep(10)
 
 def run_discord_bot():
     """Run Discord bot in a separate thread"""
