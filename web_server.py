@@ -37,6 +37,8 @@ class HealthServer:
             "bot_status": bot_status["status"],
             "bot_connected": bot_status["connected"],
             "deployment": "render.com free web service",
+            "schedule": "Daily UTC 01:00",
+            "sources": "The Verge + CNET",
             "error": bot_status["error"]
         }
         return web.json_response(status)
@@ -45,15 +47,18 @@ class HealthServer:
         """Bot information endpoint"""
         info = {
             "service": "GDG Ulaanbaatar Tech News Bot",
-            "version": "2.0",
+            "version": "2.1",
             "features": [
                 "Mongolian translation",
                 "Tech news filtering", 
                 "Multi-server support",
-                "Automatic scheduling"
+                "Daily UTC 01:00 scheduling",
+                "Dual news sources"
             ],
             "status": bot_status["status"],
-            "source": "The Verge RSS",
+            "sources": "The Verge + CNET RSS",
+            "schedule": "Daily at UTC 01:00 (UB 09:00)",
+            "articles_per_day": "4 total (2 from each source)",
             "channels": "2 Discord servers configured",
             "free_tier": "Render.com Web Service"
         }
@@ -142,6 +147,8 @@ async def main():
     logger.info("=" * 60)
     logger.info("📋 Deployment: Render.com Web Service (Free Tier)")
     logger.info("🤖 Bot: Discord Bot + Web Health Check")
+    logger.info("📅 Schedule: Daily at UTC 01:00 (UB 09:00)")
+    logger.info("📰 Sources: The Verge + CNET (4 articles)")
     logger.info("=" * 60)
     
     # Start Discord bot in background thread
@@ -159,6 +166,7 @@ async def main():
     
     logger.info("✅ Both services started successfully!")
     logger.info("🔄 Services running continuously...")
+    logger.info("📅 Bot posts daily at UTC 01:00 (UB 09:00)")
     logger.info(f"📡 Monitor at: https://your-app.onrender.com/health")
     
     # Start keep-alive ping task
