@@ -3,7 +3,7 @@ from discord.ext import commands, tasks
 import feedparser
 import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 from deep_translator import GoogleTranslator
 from dotenv import load_dotenv
@@ -191,7 +191,7 @@ class NewsService:
                 return []
             
             articles = []
-            cutoff_time = datetime.utcnow() - timedelta(hours=24)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
             
             for entry in feed.entries[:20]:  # Check more articles to find tech ones
                 try:
@@ -245,7 +245,7 @@ class NewsService:
         """Save the current time as last check time"""
         try:
             with open(self.last_check_file, 'w') as f:
-                json.dump({'last_check': datetime.utcnow().isoformat()}, f)
+                json.dump({'last_check': datetime.now(timezone.utc).isoformat()}, f)
         except Exception as e:
             logger.error(f"Error saving last check time: {e}")
 class GDGNewsBot:
@@ -509,7 +509,7 @@ class GDGNewsBot:
                 title="🤖 GDG News Bot статус",
                 description="Технологийн мэдээний ботын одоогийн байдал",
                 color=0x4285f4,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
             
             embed.add_field(
@@ -708,7 +708,7 @@ class GDGNewsBot:
         """Background task to check for new news"""
         try:
             last_check = self.news_service.get_last_check_time()
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
             
             if not last_check or (current_time - last_check).total_seconds() >= self.check_interval * 3600:
                 logger.info("Checking for new tech news...")
