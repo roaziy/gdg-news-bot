@@ -269,6 +269,9 @@ class GDGNewsBot:
         else:
             self.channel_ids = []
         
+        # Track recent mentions to prevent duplicate responses
+        self.recent_mentions = {}  # Store message_id -> timestamp
+        
         self.check_interval = int(os.getenv('NEWS_CHECK_INTERVAL_HOURS', 4))
         self.max_news_per_post = int(os.getenv('MAX_NEWS_PER_POST', 3))
         self.strict_tech_filter = os.getenv('STRICT_TECH_FILTER', 'true').lower() == 'true'
@@ -307,6 +310,23 @@ class GDGNewsBot:
             
             # Check if bot is mentioned
             if self.bot.user in message.mentions:
+                # Prevent duplicate responses (same message within 30 seconds)
+                current_time = datetime.now(timezone.utc)
+                message_key = f"{message.id}_{message.channel.id}"
+                
+                if message_key in self.recent_mentions:
+                    time_diff = current_time - self.recent_mentions[message_key]
+                    if time_diff.total_seconds() < 30:  # 30 second cooldown
+                        logger.debug(f"Ignoring duplicate mention within 30 seconds: {message_key}")
+                        return
+                
+                # Clean old mentions (older than 5 minutes)
+                cutoff_time = current_time - timedelta(minutes=5)
+                self.recent_mentions = {k: v for k, v in self.recent_mentions.items() if v > cutoff_time}
+                
+                # Record this mention
+                self.recent_mentions[message_key] = current_time
+                
                 content = message.content.lower()
                 
                 # Mongolian greetings and news requests
