@@ -2,11 +2,13 @@
 """
 Simple web server for Render.com FREE TIER deployment
 Runs Discord bot alongside web server to satisfy port binding requirements
+Includes keep-alive ping to prevent free tier sleeping
 """
 import os
 import asyncio
 import logging
 import threading
+import aiohttp
 from aiohttp import web
 from datetime import datetime
 import json
@@ -77,6 +79,29 @@ class HealthServer:
         logger.info(f"🌐 Health check: http://0.0.0.0:{self.port}/health")
         logger.info(f"📊 Bot info: http://0.0.0.0:{self.port}/status")
 
+async def keep_alive_ping():
+    """Ping self every 10 minutes to prevent Render free tier sleeping"""
+    # Wait a bit for server to start
+    await asyncio.sleep(60)
+    
+    # Get the service URL from environment or use default
+    service_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://gdg-news-bot-v1.onrender.com')
+    
+    while True:
+        try:
+            await asyncio.sleep(600)  # 10 minutes
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f'{service_url}/health', timeout=30) as response:
+                    if response.status == 200:
+                        logger.info(f"🔄 Keep-alive ping successful: {response.status}")
+                    else:
+                        logger.warning(f"⚠️ Keep-alive ping returned: {response.status}")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Keep-alive ping timeout")
+        except Exception as e:
+            logger.error(f"❌ Keep-alive ping failed: {e}")
+
 def run_discord_bot():
     """Run Discord bot in a separate thread"""
     try:
@@ -123,6 +148,10 @@ async def main():
     logger.info("🔄 Services running continuously...")
     logger.info(f"📡 Monitor at: https://your-app.onrender.com/health")
     
+    # Start keep-alive ping task
+    keep_alive_task = asyncio.create_task(keep_alive_ping())
+    logger.info("⏰ Keep-alive ping task started")
+    
     # Keep the web server alive forever
     try:
         while True:
@@ -130,6 +159,7 @@ async def main():
             logger.debug("Web server heartbeat...")
     except KeyboardInterrupt:
         logger.info("\n👋 Shutting down...")
+        keep_alive_task.cancel()
 
 if __name__ == "__main__":
     asyncio.run(main())
