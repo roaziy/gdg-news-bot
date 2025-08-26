@@ -84,11 +84,12 @@ class TranslationService:
             return f"[Орчуулга амжилтгүй] {text}"
 
 class NewsService:
-    """Handles fetching and processing news from The Verge"""
+    """Handles fetching and processing news from The Verge and CNET"""
     
     def __init__(self):
-        # Use The Verge's main RSS feed and filter by tech categories
-        self.rss_url = "https://www.theverge.com/rss/index.xml"
+        # RSS feeds for both sources
+        self.verge_rss_url = "https://www.theverge.com/rss/index.xml"
+        self.cnet_rss_url = "https://www.cnet.com/rss/news/"
         self.last_check_file = 'last_check.json'
         self.strict_tech_filter = True  # Will be set by bot
     
@@ -184,17 +185,46 @@ class NewsService:
         # Require at least 1 strong tech keyword match
         return tech_score > 0
 
-    async def fetch_latest_articles(self, max_articles: int = 3) -> List[NewsArticle]:
-        """Fetch latest tech news articles from The Verge"""
+    async def fetch_latest_articles(self, max_articles: int = 2) -> List[NewsArticle]:
+        """Fetch latest tech news articles from The Verge and CNET"""
         try:
-            feed = feedparser.parse(self.rss_url)
+            all_articles = []
+            
+            # Fetch from The Verge (2 articles)
+            verge_articles = await self._fetch_from_source(
+                self.verge_rss_url, 
+                "The Verge", 
+                max_articles_per_source=2
+            )
+            all_articles.extend(verge_articles)
+            
+            # Fetch from CNET (2 articles)
+            cnet_articles = await self._fetch_from_source(
+                self.cnet_rss_url, 
+                "CNET", 
+                max_articles_per_source=2
+            )
+            all_articles.extend(cnet_articles)
+            
+            # Sort by publication date (newest first)
+            all_articles.sort(key=lambda x: x.published, reverse=True)
+            return all_articles
+            
+        except Exception as e:
+            logger.error(f"Error fetching news: {e}")
+            return []
+    
+    async def _fetch_from_source(self, rss_url: str, source_name: str, max_articles_per_source: int = 2) -> List[NewsArticle]:
+        """Fetch articles from a specific RSS source"""
+        try:
+            feed = feedparser.parse(rss_url)
             
             if not feed.entries:
-                logger.warning("No entries found in The Verge RSS feed")
+                logger.warning(f"No entries found in {source_name} RSS feed")
                 return []
             
             articles = []
-            cutoff_time = datetime.now(ULAANBAATAR_TZ) - timedelta(hours=24)
+            cutoff_time = datetime.now(ULAANBAATAR_TZ) - timedelta(hours=36)  # Extended to 36 hours for daily checks
             
             for entry in feed.entries[:20]:  # Check more articles to find tech ones
                 try:
@@ -219,20 +249,23 @@ class NewsService:
                                 description=description,
                                 link=entry.link,
                                 published=pub_date,
-                                author=getattr(entry, 'author', 'The Verge')
+                                author=source_name
                             )
                             articles.append(article)
                         
+                        # Stop if we have enough articles from this source
+                        if len(articles) >= max_articles_per_source:
+                            break
+                        
                 except Exception as e:
-                    logger.error(f"Error processing article: {e}")
+                    logger.error(f"Error processing {source_name} article: {e}")
                     continue
             
-            # Sort by publication date (newest first)
-            articles.sort(key=lambda x: x.published, reverse=True)
-            return articles[:max_articles]
+            logger.info(f"Found {len(articles)} tech articles from {source_name}")
+            return articles
             
         except Exception as e:
-            logger.error(f"Error fetching news from The Verge: {e}")
+            logger.error(f"Error fetching news from {source_name}: {e}")
             return []
     
     def get_last_check_time(self) -> Optional[datetime]:
@@ -276,8 +309,9 @@ class GDGNewsBot:
         # Track recent mentions to prevent duplicate responses
         self.recent_mentions = {}  # Store message_id -> timestamp
         
-        self.check_interval = int(os.getenv('NEWS_CHECK_INTERVAL_HOURS', 4))
-        self.max_news_per_post = int(os.getenv('MAX_NEWS_PER_POST', 3))
+        # Daily scheduled time for news posting (UTC 01:00)
+        self.scheduled_hour = 1  # UTC hour (01:00)
+        self.max_news_per_post = 4  # Total: 2 from Verge + 2 from CNET
         self.strict_tech_filter = os.getenv('STRICT_TECH_FILTER', 'true').lower() == 'true'
         
         # Services
@@ -358,7 +392,7 @@ class GDGNewsBot:
             # Create loading embed
             loading_embed = discord.Embed(
                 title="🔍 Шинэ мэдээ хайж байна...",
-                description="The Verge-ээс хамгийн сүүлийн технологийн мэдээг авч байна",
+                description="The Verge болон CNET-ээс хамгийн сүүлийн технологийн мэдээг авч байна",
                 color=0xffa500
             )
             loading_embed.set_thumbnail(
@@ -375,7 +409,7 @@ class GDGNewsBot:
                     # Last resort: send plain text
                     loading_msg = await message.channel.send("🔍 Шинэ мэдээ хайж байна...")
             
-            articles = await self.news_service.fetch_latest_articles(2)
+            articles = await self.news_service.fetch_latest_articles(4)  # Fetch 4 articles (2 from each source)
             
             if not articles:
                 no_news_embed = discord.Embed(
@@ -529,12 +563,20 @@ class GDGNewsBot:
                 last_check_ub = last_check.astimezone(ULAANBAATAR_TZ)
                 last_check_str = last_check_ub.strftime("%Y-%m-%d %H:%M:%S (УБ)")
                 
-                next_check = last_check + timedelta(hours=self.check_interval)
-                next_check_ub = next_check.astimezone(ULAANBAATAR_TZ)
-                next_check_str = next_check_ub.strftime("%Y-%m-%d %H:%M:%S (УБ)")
+                # Calculate next scheduled time (UTC 01:00 daily)
+                now_utc = datetime.now(timezone.utc)
+                next_run_utc = now_utc.replace(hour=1, minute=0, second=0, microsecond=0)
+                if now_utc.hour >= 1:  # If already past 1 AM today, schedule for tomorrow
+                    next_run_utc += timedelta(days=1)
+                next_run_ub = next_run_utc.astimezone(ULAANBAATAR_TZ)
+                next_check_str = next_run_ub.strftime("%Y-%m-%d %H:%M:%S (УБ)")
             else:
                 last_check_str = "Хэзээ ч"
-                next_check_str = "Удахгүй"
+                next_run_utc = datetime.now(timezone.utc).replace(hour=1, minute=0, second=0, microsecond=0)
+                if datetime.now(timezone.utc).hour >= 1:
+                    next_run_utc += timedelta(days=1)
+                next_run_ub = next_run_utc.astimezone(ULAANBAATAR_TZ)
+                next_check_str = next_run_ub.strftime("%Y-%m-%d %H:%M:%S (УБ)")
             
             embed = discord.Embed(
                 title="🤖 GDG News Bot статус",
@@ -554,8 +596,8 @@ class GDGNewsBot:
                 inline=True
             )
             embed.add_field(
-                name="🔄 Шалгах интервал", 
-                value=f"```{self.check_interval} цаг```", 
+                name="🔄 Хуваарь", 
+                value=f"```Өдөр бүр UTC 01:00```", 
                 inline=True
             )
             embed.add_field(
@@ -570,7 +612,7 @@ class GDGNewsBot:
             )
             embed.add_field(
                 name="🌐 Эх сурвалж", 
-                value="```The Verge RSS```", 
+                value="```The Verge + CNET```", 
                 inline=True
             )
             embed.add_field(
@@ -618,19 +660,19 @@ class GDGNewsBot:
             
             embed.add_field(
                 name="🔄 Автомат мэдээ",
-                value=f"```{self.check_interval} цаг тутам```\nАвтоматаар шинэ мэдээ шалгаж пост хийдэг",
+                value=f"```Өдөр бүр UTC 01:00```\nАвтоматаар өдөр бүр шинэ мэдээ шалгаж пост хийдэг",
                 inline=False
             )
             
             embed.add_field(
                 name="🌍 Орчуулга",
-                value="```Англи ➜ Монгол```\nThe Verge-ээс авсан мэдээг монгол хэл рүү орчуулна",
+                value="```Англи ➜ Монгол```\nThe Verge болон CNET-ээс авсан мэдээг монгол хэл рүү орчуулна",
                 inline=True
             )
             
             embed.add_field(
                 name="📰 Эх сурвалж",
-                value="```The Verge```\nДэлхийн шилдэг технологийн мэдээний сайт",
+                value="```The Verge + CNET```\nДэлхийн шилдэг технологийн мэдээний сайтууд",
                 inline=True
             )
             
@@ -734,19 +776,28 @@ class GDGNewsBot:
                     
                 await ctx.send(fallback_text)
 
-    @tasks.loop(hours=1)
+    @tasks.loop(minutes=60)  # Check every hour to catch the scheduled time
     async def news_check_task(self):
-        """Background task to check for new news"""
+        """Background task to check for new news at UTC 01:00 daily"""
         try:
-            last_check = self.news_service.get_last_check_time()
-            current_time = datetime.now(ULAANBAATAR_TZ)
+            current_utc = datetime.now(timezone.utc)
             
-            if not last_check or (current_time - last_check).total_seconds() >= self.check_interval * 3600:
-                logger.info("Checking for new tech news...")
+            # Check if it's the scheduled time (UTC 01:00)
+            if current_utc.hour == self.scheduled_hour and current_utc.minute < 60:
+                last_check = self.news_service.get_last_check_time()
+                
+                # Ensure we don't post multiple times within the same hour
+                if last_check:
+                    time_since_last = current_utc - last_check.replace(tzinfo=timezone.utc) if last_check.tzinfo is None else current_utc - last_check
+                    if time_since_last.total_seconds() < 3600:  # Less than 1 hour ago
+                        logger.debug("Already posted news within the last hour, skipping...")
+                        return
+                
+                logger.info(f"Scheduled news check at UTC {current_utc.strftime('%H:%M')} - fetching tech news...")
                 await self.fetch_and_post_news()
         
         except Exception as e:
-            logger.error(f"Error in news checking task: {e}")
+            logger.error(f"Error in scheduled news checking task: {e}")
     
     async def create_news_embed(self, article: NewsArticle) -> discord.Embed:
         """Create a Discord embed for a news article"""
@@ -777,28 +828,38 @@ class GDGNewsBot:
             )
             
             embed.add_field(
-                name="✍️ Зохиогч",
+                name="✍️ Эх сурвалж",
                 value=article.author,
                 inline=True
             )
             
             embed.add_field(
-                name="🔗 Эх сурвалж",
-                value="[The Verge](https://www.theverge.com)",
+                name="🔗 Линк",
+                value=f"[{article.author}]({article.link})",
                 inline=True
             )
             
-            # Set author with The Verge branding
-            embed.set_author(
-                name="The Verge • Tech News",
-                icon_url="https://cdn.vox-cdn.com/uploads/chorus_asset/file/7395359/favicon-16x16.0.png",
-                url="https://www.theverge.com"
-            )
-            
-            # Add The Verge logo as thumbnail
-            embed.set_thumbnail(
-                url="https://cdn.vox-cdn.com/uploads/chorus_asset/file/13668586/the_verge_logo.0.png"
-            )
+            # Set author with appropriate branding based on source
+            if "verge" in article.author.lower():
+                embed.set_author(
+                    name="The Verge • Tech News",
+                    icon_url="https://cdn.vox-cdn.com/uploads/chorus_asset/file/7395359/favicon-16x16.0.png",
+                    url="https://www.theverge.com"
+                )
+                # Add The Verge logo as thumbnail
+                embed.set_thumbnail(
+                    url="https://cdn.vox-cdn.com/uploads/chorus_asset/file/13668586/the_verge_logo.0.png"
+                )
+            else:  # CNET
+                embed.set_author(
+                    name="CNET • Tech News",
+                    icon_url="https://www.cnet.com/favicon.ico",
+                    url="https://www.cnet.com"
+                )
+                # Add CNET logo as thumbnail
+                embed.set_thumbnail(
+                    url="https://www.cnet.com/a/img/resize/c5a6b06db66b5c7be5d46f2d83bbe2ad79a8a8ba/hub/2019/04/15/b6ad96c7-34e0-45fa-bc76-6dd37b2c6db8/cnet-logo-og-1200x630.jpg?auto=webp&fit=crop&height=675&width=1200"
+                )
             
             # Enhanced footer with GDG branding
             embed.set_footer(
@@ -820,8 +881,8 @@ class GDGNewsBot:
             )
             
             embed.set_author(
-                name="The Verge",
-                icon_url="https://cdn.vox-cdn.com/uploads/chorus_asset/file/7395359/favicon-16x16.0.png"
+                name=article.author,
+                icon_url="https://cdn.vox-cdn.com/uploads/chorus_asset/file/7395359/favicon-16x16.0.png" if "verge" in article.author.lower() else "https://www.cnet.com/favicon.ico"
             )
             
             embed.set_footer(
@@ -910,6 +971,8 @@ class GDGNewsBot:
         
         logger.info("Starting GDG News Bot...")
         logger.info(f"Configured channels: {len(self.channel_ids)}")
+        logger.info(f"Scheduled time: Daily at UTC {self.scheduled_hour:02d}:00")
+        logger.info(f"News sources: The Verge + CNET (4 articles total)")
         logger.info(f"Tech filter: {'Enabled' if self.strict_tech_filter else 'Disabled'}")
         self.bot.run(self.token)
 
