@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """
-Simple web server for Render.com deployment
-Runs alongside the Discord bot to satisfy port binding requirements
+Simple web server for Render.com FREE TIER deployment
+Runs Discord bot alongside web server to satisfy port binding requirements
 """
 import os
 import asyncio
 import logging
+import threading
 from aiohttp import web
 from datetime import datetime
 import json
 
-# Import the main function from bot
-from bot import main as bot_main
-
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Global variable to track bot status
+bot_status = {"status": "starting", "error": None, "connected": False}
 
 class HealthServer:
     """Simple health check server for Render.com"""
@@ -23,7 +24,6 @@ class HealthServer:
     def __init__(self, port=10000):
         self.port = port
         self.start_time = datetime.now()
-        self.bot_status = "starting"
     
     async def health_check(self, request):
         """Health check endpoint"""
@@ -32,8 +32,10 @@ class HealthServer:
             "service": "GDG News Bot",
             "uptime": str(datetime.now() - self.start_time),
             "timestamp": datetime.now().isoformat(),
-            "bot_status": self.bot_status,
-            "deployment": "render.com web service"
+            "bot_status": bot_status["status"],
+            "bot_connected": bot_status["connected"],
+            "deployment": "render.com free web service",
+            "error": bot_status["error"]
         }
         return web.json_response(status)
     
@@ -48,9 +50,10 @@ class HealthServer:
                 "Multi-server support",
                 "Automatic scheduling"
             ],
-            "status": self.bot_status,
+            "status": bot_status["status"],
             "source": "The Verge RSS",
-            "channels": "2 Discord servers configured"
+            "channels": "2 Discord servers configured",
+            "free_tier": "Render.com Web Service"
         }
         return web.json_response(info)
     
@@ -70,54 +73,61 @@ class HealthServer:
         site = web.TCPSite(runner, '0.0.0.0', self.port)
         await site.start()
         
-        self.bot_status = "server_ready"
         logger.info(f"✅ Health server started on port {self.port}")
-        logger.info(f"🌐 Health check: http://localhost:{self.port}/health")
-        logger.info(f"📊 Bot info: http://localhost:{self.port}/status")
+        logger.info(f"🌐 Health check: http://0.0.0.0:{self.port}/health")
+        logger.info(f"📊 Bot info: http://0.0.0.0:{self.port}/status")
 
-async def run_bot_async():
-    """Run the Discord bot asynchronously"""
-    logger.info("🤖 Starting Discord bot...")
+def run_discord_bot():
+    """Run Discord bot in a separate thread"""
     try:
-        # Run the bot main function
-        await asyncio.get_event_loop().run_in_executor(None, bot_main)
+        logger.info("🤖 Starting Discord bot in thread...")
+        bot_status["status"] = "initializing"
+        
+        # Import and run the bot
+        from bot import main as bot_main
+        bot_status["status"] = "running"
+        bot_status["connected"] = True
+        bot_main()
+        
     except Exception as e:
         logger.error(f"❌ Bot error: {e}")
+        bot_status["status"] = "error"
+        bot_status["error"] = str(e)
+        bot_status["connected"] = False
 
 async def main():
-    """Main function to run both web server and Discord bot"""
+    """Main function for Render.com FREE TIER"""
     # Get port from environment (Render.com sets this)
     port = int(os.environ.get('PORT', 10000))
     
-    logger.info("🚀 Starting GDG News Bot with Web Server")
-    logger.info("=" * 50)
+    logger.info("🚀 Starting GDG News Bot - FREE TIER DEPLOYMENT")
+    logger.info("=" * 60)
+    logger.info("📋 Deployment: Render.com Web Service (Free Tier)")
+    logger.info("🤖 Bot: Discord Bot + Web Health Check")
+    logger.info("=" * 60)
     
-    # Create health server
+    # Start Discord bot in background thread
+    logger.info("🔄 Starting Discord bot in background thread...")
+    bot_thread = threading.Thread(target=run_discord_bot, daemon=True)
+    bot_thread.start()
+    
+    # Give bot a moment to start
+    await asyncio.sleep(2)
+    
+    # Create and start health server
     health_server = HealthServer(port)
-    
-    # Start web server
     logger.info(f"🌐 Starting health server on port {port}...")
     await health_server.start_server()
     
-    # Start Discord bot in background
-    logger.info("🤖 Starting Discord bot in background...")
-    bot_task = asyncio.create_task(run_bot_async())
-    health_server.bot_status = "bot_starting"
-    
     logger.info("✅ Both services started successfully!")
-    logger.info(f"📡 Health check available at: http://localhost:{port}/health")
-    logger.info("🔄 Bot will run continuously...")
+    logger.info("🔄 Services running continuously...")
+    logger.info(f"📡 Monitor at: https://your-app.onrender.com/health")
     
-    # Keep the server running
-    try:
-        await bot_task
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        
-    # Keep web server alive
+    # Keep the web server alive forever
     try:
         while True:
-            await asyncio.sleep(60)  # Check every minute
+            await asyncio.sleep(60)  # Keep alive check every minute
+            logger.debug("Web server heartbeat...")
     except KeyboardInterrupt:
         logger.info("\n👋 Shutting down...")
 
