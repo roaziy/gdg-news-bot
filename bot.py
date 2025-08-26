@@ -13,6 +13,9 @@ from bs4 import BeautifulSoup
 import re
 from typing import List, Dict, Optional
 
+# Ulaanbaatar timezone (UTC+8)
+ULAANBAATAR_TZ = timezone(timedelta(hours=8))
+
 # Load environment variables
 load_dotenv()
 
@@ -191,12 +194,13 @@ class NewsService:
                 return []
             
             articles = []
-            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+            cutoff_time = datetime.now(ULAANBAATAR_TZ) - timedelta(hours=24)
             
             for entry in feed.entries[:20]:  # Check more articles to find tech ones
                 try:
-                    # Create timezone-aware datetime from RSS feed
-                    pub_date = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                    # Create timezone-aware datetime from RSS feed (UTC) and convert to Ulaanbaatar time
+                    pub_date_utc = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                    pub_date = pub_date_utc.astimezone(ULAANBAATAR_TZ)
                     
                     if pub_date > cutoff_time:
                         description = self.clean_html(entry.description)
@@ -246,7 +250,7 @@ class NewsService:
         """Save the current time as last check time"""
         try:
             with open(self.last_check_file, 'w') as f:
-                json.dump({'last_check': datetime.now(timezone.utc).isoformat()}, f)
+                json.dump({'last_check': datetime.now(ULAANBAATAR_TZ).isoformat()}, f)
         except Exception as e:
             logger.error(f"Error saving last check time: {e}")
 class GDGNewsBot:
@@ -311,7 +315,7 @@ class GDGNewsBot:
             # Check if bot is mentioned
             if self.bot.user in message.mentions:
                 # Prevent duplicate responses (same message within 30 seconds)
-                current_time = datetime.now(timezone.utc)
+                current_time = datetime.now(ULAANBAATAR_TZ)
                 message_key = f"{message.id}_{message.channel.id}"
                 
                 if message_key in self.recent_mentions:
@@ -331,7 +335,7 @@ class GDGNewsBot:
                 
                 # Mongolian greetings and news requests
                 mongolian_keywords = [
-                    'шинэ мэдээ', 'мэдээ', 'юу байна', 'сонин', 
+                    'шинэ мэдээ', 'мэдээ', 'medee', 'юу байна', 'сонин', 
                     'tech news', 'news', 'мэдээлэл'
                 ]
                 
@@ -519,9 +523,15 @@ class GDGNewsBot:
             last_check = self.news_service.get_last_check_time()
             
             if last_check:
-                last_check_str = last_check.strftime("%Y-%m-%d %H:%M:%S UTC")
+                # Convert UTC to Ulaanbaatar time for display
+                if last_check.tzinfo is None:
+                    last_check = last_check.replace(tzinfo=timezone.utc)
+                last_check_ub = last_check.astimezone(ULAANBAATAR_TZ)
+                last_check_str = last_check_ub.strftime("%Y-%m-%d %H:%M:%S (УБ)")
+                
                 next_check = last_check + timedelta(hours=self.check_interval)
-                next_check_str = next_check.strftime("%Y-%m-%d %H:%M:%S UTC")
+                next_check_ub = next_check.astimezone(ULAANBAATAR_TZ)
+                next_check_str = next_check_ub.strftime("%Y-%m-%d %H:%M:%S (УБ)")
             else:
                 last_check_str = "Хэзээ ч"
                 next_check_str = "Удахгүй"
@@ -530,7 +540,7 @@ class GDGNewsBot:
                 title="🤖 GDG News Bot статус",
                 description="Технологийн мэдээний ботын одоогийн байдал",
                 color=0x4285f4,
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(ULAANBAATAR_TZ)
             )
             
             embed.add_field(
@@ -729,7 +739,7 @@ class GDGNewsBot:
         """Background task to check for new news"""
         try:
             last_check = self.news_service.get_last_check_time()
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now(ULAANBAATAR_TZ)
             
             if not last_check or (current_time - last_check).total_seconds() >= self.check_interval * 3600:
                 logger.info("Checking for new tech news...")
